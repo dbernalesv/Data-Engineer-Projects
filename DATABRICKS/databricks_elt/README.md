@@ -4,9 +4,9 @@ Proyecto individual de Diego Bernales para construir, por etapas, un flujo ELT c
 
 ## Avance
 
-- Etapa actual: carga de datos Raw a Bronze.
+- Etapas implementadas: carga de Raw a Bronze y transformación de Bronze a Silver.
 - Rama de trabajo: `feature/databricks`.
-- Silver y Gold se incorporarán después de revisar Bronze.
+- Gold se incorporará después de revisar Silver.
 - Los archivos de datos se guardan en Databricks; no se versionan en Git.
 
 ## Fuente de datos
@@ -21,8 +21,9 @@ Descarga los CSV y súbelos a la carpeta `olist/` del volumen Raw. No agregues l
 
 - `config/`: parámetros comunes y configuración por capa.
 - `ddl/bronze/`: sentencias SQL para crear los esquemas, volúmenes y tablas Bronze.
-- `notebooks/bronze/`: notebook que organiza los pasos de la carga.
-- `src/databricks_elt/process/`: lógica de ingesta reutilizable.
+- `ddl/silver/`: sentencias SQL para crear las tablas Silver.
+- `notebooks/`: notebooks de entrada para cada capa.
+- `src/databricks_elt/process/`: lógica de ingesta y transformación reutilizable.
 - `src/databricks_elt/utils/`: funciones para leer la configuración, escribir logs y ejecutar DDL.
 - `resources/jobs/`: definición del Job del bundle.
 
@@ -34,7 +35,7 @@ Necesitas un workspace Databricks Free Edition con Unity Catalog y permisos para
 /Volumes/olist_dev/control/olist_raw/olist/
 ```
 
-El catálogo del proyecto es `olist_dev`. El esquema `control` contiene los volúmenes `olist_raw` y `olist_state`; el esquema `bronze` contiene las tablas Delta. El DDL crea los objetos que falten y conserva los que ya existen.
+El catálogo del proyecto es `olist_dev`. El esquema `control` contiene los volúmenes `olist_raw` y `olist_state`; los esquemas `bronze` y `silver` contienen las tablas Delta de cada capa. El DDL crea los objetos que falten y conserva los que ya existen.
 
 Auto Loader lee los CSV desde el volumen Raw y guarda su esquema y checkpoints bajo:
 
@@ -42,7 +43,9 @@ Auto Loader lee los CSV desde el volumen Raw y guarda su esquema y checkpoints b
 /Volumes/olist_dev/control/olist_state/autoloader/bronze/
 ```
 
-Las tablas de destino tienen nombres como `olist_dev.bronze.brz_orders`. Bronze conserva los valores de origen como texto, agrega `_source_file` y `_ingested_at`, y guarda en `_rescued_data` los campos que no reconoce. Las conversiones de tipos y las reglas de negocio se dejan para Silver.
+Las tablas Bronze tienen nombres como `olist_dev.bronze.brz_orders`. Conservan los valores de origen como texto, agregan `_source_file` y `_ingested_at`, y guardan en `_rescued_data` los campos que no reconocen. El DDL habilita Change Data Feed (CDF) para que Silver pueda leer los cambios de Bronze.
+
+Silver crea tablas como `olist_dev.silver.slv_orders`. Lee el snapshot inicial y los cambios posteriores desde Bronze mediante CDF, convierte fechas y campos numéricos, normaliza textos, elimina duplicados por clave y aplica reglas sencillas de calidad definidas en `config/silver.yml`.
 
 ## Desplegar desde PowerShell
 
@@ -57,6 +60,6 @@ databricks bundle run -t dev elt_pipeline
 
 El bundle se despliega desde la rama local en la que estés trabajando hacia el único workspace, usando el target `dev`. Este flujo no requiere una Git Folder de Databricks. La configuración de autenticación se guarda fuera del repositorio.
 
-## Revisión de Bronze
+## Revisión de Bronze y Silver
 
-Al terminar el Job, comprueba que se hayan creado las tablas esperadas, que sus filas correspondan a los archivos de origen y que incluyan `_source_file` y `_ingested_at`. Si vuelves a ejecutar la carga, Auto Loader usa sus checkpoints para no volver a procesar los mismos archivos.
+Al terminar el Job, revisa el estado de ambas tareas y las tablas de destino. Bronze conserva los valores de origen; Silver presenta fechas y métricas con tipos consistentes, textos normalizados y claves sin duplicados. Auto Loader y CDF guardan checkpoints independientes en el volumen `olist_state` para procesar solo los archivos y cambios nuevos.
