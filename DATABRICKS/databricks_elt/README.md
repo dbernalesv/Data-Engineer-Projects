@@ -45,7 +45,7 @@ Auto Loader lee los CSV desde el volumen Raw y guarda su esquema y checkpoints b
 
 Las tablas Bronze tienen nombres como `olist_dev.bronze.brz_orders`. Conservan los valores de origen como texto, agregan `_source_file` y `_ingested_at`, y guardan en `_rescued_data` los campos que no reconocen. El DDL habilita Change Data Feed (CDF) para que Silver pueda leer los cambios de Bronze.
 
-Silver crea tablas como `olist_dev.silver.slv_orders`. Lee el snapshot inicial y los cambios posteriores desde Bronze mediante CDF, convierte fechas y campos numéricos, normaliza textos, elimina duplicados por clave y aplica reglas sencillas de calidad definidas en `config/silver.yml`.
+Silver crea tablas como `olist_dev.silver.slv_orders`. Lee el snapshot inicial y los cambios posteriores desde Bronze mediante CDF, convierte fechas y campos numéricos, normaliza textos, elimina duplicados por clave y aplica reglas sencillas de calidad definidas en `config/silver.yml`. CDF queda habilitado también en las tablas Silver para que Gold pueda consumir sus cambios.
 
 ## Desplegar desde PowerShell
 
