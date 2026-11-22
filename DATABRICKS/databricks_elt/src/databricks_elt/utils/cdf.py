@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import NamedTuple
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql.window import Window
 
 from databricks_elt.utils.merge import merge_idempotently
 
@@ -86,4 +87,21 @@ def read_cdf_range(
         .option("startingVersion", starting_version)
         .option("endingVersion", ending_version)
         .table(table_name)
+    )
+
+
+def latest_change_images(dataframe: DataFrame, primary_keys: list[str]) -> DataFrame:
+    """Conserva la imagen más reciente por clave, incluida la posterior a updates."""
+    window = Window.partitionBy(*primary_keys).orderBy(
+        F.col("_commit_version").desc(),
+        F.col("_commit_timestamp").desc(),
+        F.when(F.col("_change_type") == "update_postimage", 1)
+        .otherwise(0)
+        .desc(),
+    )
+    return (
+        dataframe.filter(F.col("_change_type").isin("insert", "update_postimage"))
+        .select("*", F.row_number().over(window).alias("_change_rank"))
+        .filter(F.col("_change_rank") == 1)
+        .drop("_change_rank")
     )

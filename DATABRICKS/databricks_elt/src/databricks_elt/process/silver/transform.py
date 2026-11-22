@@ -6,10 +6,10 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
-from pyspark.sql.window import Window
 
 from databricks_elt.utils.cdf import (
     get_watermark,
+    latest_change_images,
     latest_table_version,
     read_cdf_range,
     save_watermark,
@@ -75,25 +75,6 @@ def _apply_quality_rules(
     return dataframe
 
 
-def _latest_change_per_key(
-    dataframe: DataFrame,
-    primary_keys: list[str],
-) -> DataFrame:
-    order = [
-        F.col("_commit_version").desc(),
-        F.col("_commit_timestamp").desc(),
-        F.when(F.col("_change_type") == "update_postimage", 1)
-        .otherwise(0)
-        .desc(),
-    ]
-    window = Window.partitionBy(*primary_keys).orderBy(*order)
-    return (
-        dataframe.select("*", F.row_number().over(window).alias("_change_rank"))
-        .filter(F.col("_change_rank") == 1)
-        .drop("_change_rank")
-    )
-
-
 def _prepare_table(
     spark: SparkSession,
     source_name: str,
@@ -140,10 +121,10 @@ def _prepare_table(
         watermark.version + 1,
         latest.version,
     )
-    changes = read_cdf_range(
-        spark, source_name, watermark.version + 1, latest.version
-    ).filter(F.col("_change_type").isin("insert", "update_postimage"))
-    changes = _latest_change_per_key(changes, keys)
+    changes = latest_change_images(
+        read_cdf_range(spark, source_name, watermark.version + 1, latest.version),
+        keys,
+    )
     cleaned = _silver_projection(changes, table_config["fields"])
     cleaned = _apply_quality_rules(cleaned, table_config)
     merge_idempotently(spark, cleaned, target_name, keys)
@@ -202,6 +183,10 @@ def transform_all(
     """Procesa CDF por rango y registra el avance de cada tabla."""
     identifiers = {
         "catalog": common_config["catalog"],
+        "gold_schema": common_config["gold_schema"],
+        "gold_cdf_watermarks_table": common_config[
+            "gold_cdf_watermarks_table"
+        ],
         "silver_schema": common_config["silver_schema"],
         "control_schema": common_config["control_schema"],
         "cdf_watermarks_table": common_config["cdf_watermarks_table"],

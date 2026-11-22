@@ -26,3 +26,12 @@ resources:
             source: WORKSPACE
             base_parameters:
               project_root: ${workspace.file_path}
+        - task_key: gold_transformation
+          depends_on:
+            - task_key: silver_transformation
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/gold/03_transform_to_gold.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
