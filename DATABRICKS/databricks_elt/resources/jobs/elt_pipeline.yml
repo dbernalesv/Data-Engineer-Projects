@@ -16,4 +16,4 @@ resources:
             notebook_path: ../../notebooks/bronze/01_ingest_to_bronze.py
             source: WORKSPACE
             base_parameters:
-              project_root: /Workspace/${workspace.file_path}
+              project_root: ${workspace.file_path}

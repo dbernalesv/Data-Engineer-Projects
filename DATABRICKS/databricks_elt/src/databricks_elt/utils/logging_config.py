@@ -1,4 +1,4 @@
-"""Configure consistent application logging for notebooks and Jobs."""
+"""Configura el logger que comparten los notebooks y los Jobs."""
 
 from __future__ import annotations
 

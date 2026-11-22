@@ -1,4 +1,4 @@
-"""Load and validate YAML project configuration."""
+"""Carga y valida la configuración YAML del proyecto."""
 
 from __future__ import annotations
 
@@ -13,17 +13,17 @@ LOGGER = get_logger(__name__)
 
 
 def load_yaml(path: Path) -> dict[str, Any]:
-    """Read a YAML mapping from disk and fail clearly for invalid config."""
+    """Lee un archivo YAML y avisa si no contiene una configuración válida."""
     try:
         with path.open(encoding="utf-8") as config_file:
             config = yaml.safe_load(config_file)
     except OSError:
-        LOGGER.exception("Could not read configuration file %s", path)
+        LOGGER.exception("No se pudo leer el archivo de configuración: %s", path)
         raise
     except yaml.YAMLError:
-        LOGGER.exception("Invalid YAML in configuration file %s", path)
+        LOGGER.exception("El archivo de configuración no contiene YAML válido: %s", path)
         raise
 
     if not isinstance(config, dict):
-        raise ValueError(f"Configuration file must contain a YAML mapping: {path}")
+        raise ValueError(f"El archivo debe contener un objeto de configuración YAML: {path}")
     return config

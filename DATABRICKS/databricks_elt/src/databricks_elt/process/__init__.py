@@ -1,1 +1,1 @@
-"""Layer-specific processing modules."""
+"""Módulos de procesamiento organizados por capa."""

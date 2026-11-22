@@ -1,1 +1,1 @@
-"""Shared utilities for Databricks ELT layers."""
+"""Utilidades compartidas entre las capas del proyecto."""

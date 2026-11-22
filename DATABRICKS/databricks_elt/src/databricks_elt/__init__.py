@@ -1,1 +1,1 @@
-"""Reusable code for the Databricks ELT project."""
+"""Código reutilizable del proyecto ELT en Databricks."""

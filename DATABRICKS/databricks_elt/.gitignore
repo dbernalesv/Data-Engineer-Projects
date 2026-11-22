@@ -1,10 +1,10 @@
-# Local data and secrets
+# Datos locales y secretos
 data/
 .env
 .env.*
 !.env.example
 
-# Python tooling
+# Archivos auxiliares de Python
 .venv/
 venv/
 __pycache__/
@@ -13,7 +13,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Databricks local state
+# Estado local de Databricks
 .databricks/
 .bundle/
 logs/

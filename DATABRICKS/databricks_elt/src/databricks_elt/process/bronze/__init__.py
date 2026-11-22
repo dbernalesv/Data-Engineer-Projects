@@ -1,1 +1,1 @@
-"""Raw-to-Bronze ingestion."""
+"""Ingesta de datos desde Raw hacia Bronze."""

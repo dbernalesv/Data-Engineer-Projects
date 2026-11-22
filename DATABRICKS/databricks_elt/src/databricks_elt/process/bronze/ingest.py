@@ -1,4 +1,4 @@
-"""Incrementally ingest Olist CSV files into Bronze Delta tables."""
+"""Carga los CSV de Olist en las tablas Delta de Bronze."""
 
 from __future__ import annotations
 
@@ -21,7 +21,7 @@ def _with_ingestion_metadata(dataframe: DataFrame) -> DataFrame:
     selected_columns.extend(
         [
             F.col("_rescued_data"),
-            F.input_file_name().alias("_source_file"),
+            F.col("_metadata.file_path").alias("_source_file"),
             F.current_timestamp().alias("_ingested_at"),
         ]
     )
@@ -43,7 +43,7 @@ def _ingest_table(
     table_state_dir = f"{state_dir}/{table}"
     file_format = str(bronze_config["file_format"])
 
-    LOGGER.info("Starting Auto Loader for %s", table_name)
+    LOGGER.info("Iniciando la carga de %s con Auto Loader", table_name)
 
     source = (
         spark.readStream.format("cloudFiles")
@@ -69,12 +69,12 @@ def _ingest_table(
     try:
         query.awaitTermination()
     except Exception:
-        LOGGER.exception("Auto Loader failed for %s", table_name)
+        LOGGER.exception("Falló la carga de %s con Auto Loader", table_name)
         raise
 
     progress = query.lastProgress
     rows = progress.get("numInputRows", 0) if progress else 0
-    LOGGER.info("Completed Auto Loader for %s; input rows=%s", table_name, rows)
+    LOGGER.info("Carga de %s finalizada; filas leídas: %s", table_name, rows)
 
 
 def ingest_all(
@@ -82,10 +82,10 @@ def ingest_all(
     common_config: Mapping[str, str],
     bronze_config: Mapping[str, object],
 ) -> None:
-    """Process configured source patterns sequentially with independent state."""
+    """Procesa los archivos configurados, uno por uno y con estado propio."""
     tables = bronze_config.get("tables", [])
     if not tables:
-        raise ValueError("Bronze configuration must define at least one source table")
+        raise ValueError("La configuración Bronze debe incluir al menos una tabla de origen")
 
     for table_config in tables:
         _ingest_table(spark, common_config, bronze_config, table_config)
