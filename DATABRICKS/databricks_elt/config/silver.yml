@@ -1,6 +1,5 @@
 source_schema: "{bronze_schema}"
 target_schema: "{silver_schema}"
-state_dir: "/Volumes/{catalog}/{control_schema}/{state_volume}/autoloader/silver"
 
 tables:
   - source_table: brz_orders

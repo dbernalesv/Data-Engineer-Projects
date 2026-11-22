@@ -4,3 +4,4 @@ raw_volume: olist_raw
 state_volume: olist_state
 bronze_schema: bronze
 silver_schema: silver
+cdf_watermarks_table: cdf_watermarks

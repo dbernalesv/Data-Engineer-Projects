@@ -21,7 +21,7 @@ Descarga los CSV y súbelos a la carpeta `olist/` del volumen Raw. No agregues l
 
 - `config/`: parámetros comunes y configuración por capa.
 - `ddl/bronze/`: sentencias SQL para crear los esquemas, volúmenes y tablas Bronze.
-- `ddl/silver/`: sentencias SQL para crear las tablas Silver.
+- `ddl/silver/` y `ddl/control/`: sentencias SQL para crear Silver y la tabla de control CDF.
 - `notebooks/`: notebooks de entrada para cada capa.
 - `src/databricks_elt/process/`: lógica de ingesta y transformación reutilizable.
 - `src/databricks_elt/utils/`: funciones para leer la configuración, escribir logs y ejecutar DDL.
@@ -45,7 +45,11 @@ Auto Loader lee los CSV desde el volumen Raw y guarda su esquema y checkpoints b
 
 Las tablas Bronze tienen nombres como `olist_dev.bronze.brz_orders`. Conservan los valores de origen como texto, agregan `_source_file` y `_ingested_at`, y guardan en `_rescued_data` los campos que no reconocen. El DDL habilita Change Data Feed (CDF) para que Silver pueda leer los cambios de Bronze.
 
-Silver crea tablas como `olist_dev.silver.slv_orders`. Lee el snapshot inicial y los cambios posteriores desde Bronze mediante CDF, convierte fechas y campos numéricos, normaliza textos, elimina duplicados por clave y aplica reglas sencillas de calidad definidas en `config/silver.yml`. CDF queda habilitado también en las tablas Silver para que Gold pueda consumir sus cambios.
+Silver crea tablas como `olist_dev.silver.slv_orders`. La primera ejecución carga una versión consistente de Bronze; las siguientes leen los cambios de CDF desde la versión guardada en `olist_dev.control.cdf_watermarks`. Se procesan `insert` y `update_postimage`, se convierten fechas y campos numéricos, se normalizan textos y se aplican reglas de calidad de `config/silver.yml`. Un `MERGE` por clave inserta o actualiza filas y evita escrituras si los valores no cambiaron. Silver conserva `_ingested_at`, pero no `_source_file` ni los metadatos de commit de Bronze.
+
+La tabla `cdf_watermarks` guarda por tabla fuente y destino la última versión y timestamp procesados. El watermark avanza después del `MERGE`; si la ejecución se interrumpe antes, la próxima ejecución puede repetir el rango sin duplicar filas. Gold podrá reutilizar `utils/cdf.py` y `utils/merge.py` para leer CDF de Silver y escribir sus tablas con el mismo patrón idempotente. En esta etapa no se procesan eventos `delete`.
+
+En la primera ejecución de esta versión, el proceso detecta las columnas antiguas en Silver, recrea esas tablas y las carga desde una versión actual de Bronze. Bronze no se elimina ni se modifica.
 
 ## Desplegar desde PowerShell
 
@@ -62,4 +66,4 @@ El bundle se despliega desde la rama local en la que estés trabajando hacia el 
 
 ## Revisión de Bronze y Silver
 
-Al terminar el Job, revisa el estado de ambas tareas y las tablas de destino. Bronze conserva los valores de origen; Silver presenta fechas y métricas con tipos consistentes, textos normalizados y claves sin duplicados. Auto Loader y CDF guardan checkpoints independientes en el volumen `olist_state` para procesar solo los archivos y cambios nuevos.
+Al terminar el Job, revisa el estado de ambas tareas, las tablas de destino y los watermarks. Bronze conserva los valores de origen; Silver presenta fechas y métricas con tipos consistentes, textos normalizados y claves sin duplicados. Auto Loader guarda sus checkpoints en el volumen `olist_state`; Silver usa la tabla `cdf_watermarks` para continuar desde la última versión procesada.

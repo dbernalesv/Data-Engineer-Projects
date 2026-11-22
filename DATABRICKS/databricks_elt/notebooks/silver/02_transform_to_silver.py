@@ -41,8 +41,8 @@ SILVER_CONFIG = load_yaml(PROJECT_ROOT / "config" / "silver.yml")
 # MAGIC %md
 # MAGIC ## Aplicar las reglas y guardar los cambios
 # MAGIC
-# MAGIC La primera lectura CDF carga el snapshot disponible. Las siguientes procesan las nuevas inserciones desde su checkpoint.
-# MAGIC Bronze es append-only en esta etapa, por lo que Silver consume los eventos `insert` del CDF.
+# MAGIC La primera ejecución carga el estado de Bronze en una versión concreta. Las siguientes leen los commits nuevos desde la tabla de control.
+# MAGIC Se consideran las imágenes posteriores a inserciones y actualizaciones; el `MERGE` evita duplicados y escrituras sin cambios.
 
 # COMMAND ----------
 transform_all(spark, PROJECT_ROOT, COMMON_CONFIG, SILVER_CONFIG)

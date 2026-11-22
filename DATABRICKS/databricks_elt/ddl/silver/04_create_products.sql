@@ -8,9 +8,6 @@ CREATE TABLE IF NOT EXISTS {catalog}.{silver_schema}.slv_products (
   product_length_cm INT,
   product_height_cm INT,
   product_width_cm INT,
-  _source_file STRING,
-  _ingested_at TIMESTAMP,
-  _bronze_commit_version BIGINT,
-  _bronze_commit_timestamp TIMESTAMP
+  _ingested_at TIMESTAMP
 )
 USING DELTA;

@@ -1,4 +1,4 @@
-"""Limpia y tipa los cambios que llegan desde Bronze."""
+"""Prepara Silver con lecturas incrementales desde CDF de Bronze."""
 
 from __future__ import annotations
 
@@ -6,15 +6,28 @@ from collections.abc import Mapping
 from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
+from pyspark.sql.window import Window
 
+from databricks_elt.utils.cdf import (
+    get_watermark,
+    latest_table_version,
+    read_cdf_range,
+    save_watermark,
+)
 from databricks_elt.utils.ddl import execute_ddl_directory
 from databricks_elt.utils.logging_config import get_logger
+from databricks_elt.utils.merge import merge_idempotently
 
 LOGGER = get_logger(__name__)
 _SQL_TYPES = {
     "integer": "INT",
     "decimal": "DECIMAL(12, 2)",
     "timestamp": "TIMESTAMP",
+}
+_LEGACY_COLUMNS = {
+    "_source_file",
+    "_bronze_commit_version",
+    "_bronze_commit_timestamp",
 }
 
 
@@ -37,14 +50,7 @@ def _silver_projection(dataframe: DataFrame, fields: list[Mapping[str, str]]) ->
 
         selected.append(value.alias(target))
 
-    selected.extend(
-        [
-            F.col("_source_file"),
-            F.col("_ingested_at"),
-            F.col("_commit_version").alias("_bronze_commit_version"),
-            F.col("_commit_timestamp").alias("_bronze_commit_timestamp"),
-        ]
-    )
+    selected.extend([F.col("_ingested_at")])
     return dataframe.select(*selected)
 
 
@@ -69,51 +75,122 @@ def _apply_quality_rules(
     return dataframe
 
 
-def _transform_table(
+def _latest_change_per_key(
+    dataframe: DataFrame,
+    primary_keys: list[str],
+) -> DataFrame:
+    order = [
+        F.col("_commit_version").desc(),
+        F.col("_commit_timestamp").desc(),
+        F.when(F.col("_change_type") == "update_postimage", 1)
+        .otherwise(0)
+        .desc(),
+    ]
+    window = Window.partitionBy(*primary_keys).orderBy(*order)
+    return (
+        dataframe.select("*", F.row_number().over(window).alias("_change_rank"))
+        .filter(F.col("_change_rank") == 1)
+        .drop("_change_rank")
+    )
+
+
+def _prepare_table(
     spark: SparkSession,
-    common_config: Mapping[str, str],
-    silver_config: Mapping[str, object],
+    source_name: str,
+    target_name: str,
+    watermark_table: str,
     table_config: Mapping[str, object],
 ) -> None:
-    catalog = common_config["catalog"]
-    source_schema = str(silver_config["source_schema"]).format(**common_config)
-    target_schema = str(silver_config["target_schema"]).format(**common_config)
-    source_name = f"{catalog}.{source_schema}.{table_config['source_table']}"
-    target_name = f"{catalog}.{target_schema}.{table_config['target_table']}"
-    checkpoint = (
-        f"{silver_config['state_dir'].format(**common_config)}"
-        f"/{table_config['target_table']}/checkpoint"
-    )
+    keys = list(table_config.get("primary_keys", []))
+    if not keys:
+        raise ValueError(f"La tabla {target_name} debe declarar sus claves")
 
-    LOGGER.info("Leyendo cambios de %s para preparar %s", source_name, target_name)
-    changes = (
-        spark.readStream.option("readChangeFeed", "true")
-        .table(source_name)
-        .filter(F.col("_change_type") == "insert")
+    latest = latest_table_version(spark, source_name)
+    watermark = get_watermark(spark, watermark_table, source_name)
+
+    if watermark is None:
+        LOGGER.info(
+            "Cargando el estado actual de %s en %s hasta la versión %s",
+            source_name,
+            target_name,
+            latest.version,
+        )
+        snapshot = (
+            spark.read.option("versionAsOf", latest.version).table(source_name)
+        )
+        cleaned = _silver_projection(snapshot, table_config["fields"])
+        cleaned = _apply_quality_rules(cleaned, table_config).dropDuplicates(keys)
+        merge_idempotently(spark, cleaned, target_name, keys)
+        save_watermark(
+            spark, watermark_table, source_name, target_name, latest
+        )
+        return
+
+    if latest.version <= watermark.version:
+        LOGGER.info(
+            "%s ya está al día en la versión %s",
+            target_name,
+            watermark.version,
+        )
+        return
+
+    LOGGER.info(
+        "Leyendo CDF de %s desde %s hasta %s",
+        source_name,
+        watermark.version + 1,
+        latest.version,
     )
+    changes = read_cdf_range(
+        spark, source_name, watermark.version + 1, latest.version
+    ).filter(F.col("_change_type").isin("insert", "update_postimage"))
+    changes = _latest_change_per_key(changes, keys)
     cleaned = _silver_projection(changes, table_config["fields"])
     cleaned = _apply_quality_rules(cleaned, table_config)
-    keys = table_config.get("primary_keys", [])
-    if not keys:
-        raise ValueError(f"La tabla {target_name} debe declarar sus claves para deduplicar")
-    cleaned = cleaned.dropDuplicates(keys)
+    merge_idempotently(spark, cleaned, target_name, keys)
+    save_watermark(spark, watermark_table, source_name, target_name, latest)
+    LOGGER.info("Terminó %s en la versión %s", target_name, latest.version)
 
-    query = (
-        cleaned.writeStream.format("delta")
-        .option("checkpointLocation", checkpoint)
-        .trigger(availableNow=True)
-        .toTable(target_name)
+
+def _rebuild_legacy_tables(
+    spark: SparkSession,
+    project_root: Path,
+    identifiers: Mapping[str, str],
+    common_config: Mapping[str, str],
+    silver_config: Mapping[str, object],
+    tables: list[Mapping[str, object]],
+) -> None:
+    catalog = common_config["catalog"]
+    target_schema = str(silver_config["target_schema"]).format(**common_config)
+    watermark_table = (
+        f"{catalog}.{common_config['control_schema']}."
+        f"{common_config['cdf_watermarks_table']}"
     )
+    legacy_tables = []
 
-    try:
-        query.awaitTermination()
-    except Exception:
-        LOGGER.exception("Falló la transformación de %s", target_name)
-        raise
+    for table_config in tables:
+        target_name = f"{catalog}.{target_schema}.{table_config['target_table']}"
+        if not spark.catalog.tableExists(target_name):
+            continue
+        legacy = _LEGACY_COLUMNS.intersection(spark.table(target_name).columns)
+        if legacy:
+            legacy_tables.append((target_name, table_config["source_table"]))
 
-    progress = query.lastProgress
-    rows = progress.get("numInputRows", 0) if progress else 0
-    LOGGER.info("Terminó %s; cambios leídos desde Bronze: %s", target_name, rows)
+    if not legacy_tables:
+        return
+
+    for target_name, source_table in legacy_tables:
+        LOGGER.warning(
+            "Reconstruyendo %s desde Bronze para retirar columnas antiguas",
+            target_name,
+        )
+        spark.sql(f"DROP TABLE IF EXISTS {target_name}")
+        spark.sql(
+            f"DELETE FROM {watermark_table} "
+            f"WHERE source_table = '{catalog}.{common_config['bronze_schema']}."
+            f"{source_table}'"
+        )
+
+    execute_ddl_directory(spark, project_root / "ddl" / "silver", identifiers)
 
 
 def transform_all(
@@ -122,16 +199,48 @@ def transform_all(
     common_config: Mapping[str, str],
     silver_config: Mapping[str, object],
 ) -> None:
-    """Prepara las tablas Silver y procesa sus cambios mediante CDF."""
+    """Procesa CDF por rango y registra el avance de cada tabla."""
     identifiers = {
         "catalog": common_config["catalog"],
         "silver_schema": common_config["silver_schema"],
+        "control_schema": common_config["control_schema"],
+        "cdf_watermarks_table": common_config["cdf_watermarks_table"],
     }
     execute_ddl_directory(spark, project_root / "ddl" / "silver", identifiers)
+    execute_ddl_directory(spark, project_root / "ddl" / "control", identifiers)
 
     tables = silver_config.get("tables", [])
     if not tables:
         raise ValueError("La configuración Silver debe incluir al menos una tabla")
 
+    _rebuild_legacy_tables(
+        spark,
+        project_root,
+        identifiers,
+        common_config,
+        silver_config,
+        tables,
+    )
+
+    catalog = common_config["catalog"]
+    source_schema = str(silver_config["source_schema"]).format(**common_config)
+    target_schema = str(silver_config["target_schema"]).format(**common_config)
+    watermark_table = (
+        f"{catalog}.{common_config['control_schema']}."
+        f"{common_config['cdf_watermarks_table']}"
+    )
+
     for table_config in tables:
-        _transform_table(spark, common_config, silver_config, table_config)
+        source_name = f"{catalog}.{source_schema}.{table_config['source_table']}"
+        target_name = f"{catalog}.{target_schema}.{table_config['target_table']}"
+        try:
+            _prepare_table(
+                spark,
+                source_name,
+                target_name,
+                watermark_table,
+                table_config,
+            )
+        except Exception:
+            LOGGER.exception("Falló la preparación de %s", target_name)
+            raise
