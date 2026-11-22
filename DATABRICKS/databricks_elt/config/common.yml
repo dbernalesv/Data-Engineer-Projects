@@ -1,0 +1,5 @@
+catalog: olist_dev
+control_schema: control
+raw_volume: olist_raw
+state_volume: olist_state
+bronze_schema: bronze

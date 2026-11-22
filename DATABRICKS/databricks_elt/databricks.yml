@@ -1,0 +1,18 @@
+bundle:
+  name: databricks_elt
+
+include:
+  - resources/jobs/*.yml
+
+sync:
+  include:
+    - config/**
+    - ddl/**
+    - notebooks/**
+    - pyproject.toml
+    - src/**
+
+targets:
+  dev:
+    default: true
+    mode: development

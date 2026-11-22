@@ -1,0 +1,19 @@
+# Local data and secrets
+data/
+.env
+.env.*
+!.env.example
+
+# Python tooling
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Databricks local state
+.databricks/
+.bundle/
+logs/

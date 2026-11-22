@@ -1,0 +1,19 @@
+resources:
+  jobs:
+    elt_pipeline:
+      name: databricks_elt_${bundle.target}
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: serverless
+          spec:
+            environment_version: "6"
+            dependencies:
+              - "PyYAML==6.0.3"
+      tasks:
+        - task_key: bronze_ingestion
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/bronze/01_ingest_to_bronze.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: /Workspace/${workspace.file_path}
