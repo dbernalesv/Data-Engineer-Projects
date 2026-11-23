@@ -1,0 +1,27 @@
+/// UF de residencia con su nombre brasileño.
+table Clientes
+	column 'Id de cliente'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: customer_id
+	column 'UF del cliente'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: customer_state_display
+	column 'Código UF'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: customer_state
+	partition Clientes = m
+		mode: import
+		source =
+			let
+				Origen = DatabricksMultiCloud.Catalogs("dbc-e57b1425-f9ac.cloud.databricks.com", "/sql/1.0/warehouses/2d6b0ff07428989f", [Catalog=null, Database=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0"]),
+				Catalogo = Origen{[Name="olist_dev", Kind="Database"]}[Data],
+				Gold = Catalogo{[Name="gold", Kind="Schema"]}[Data],
+				B = Gold{[Name="dim_customer", Kind="Table"]}[Data], N = Table.SelectColumns(B, {"customer_id", "customer_state"}), U = [AC="Acre",AL="Alagoas",AP="Amapá",AM="Amazonas",BA="Bahía",CE="Ceará",DF="Distrito Federal",ES="Espírito Santo",GO="Goiás",MA="Maranhão",MT="Mato Grosso",MS="Mato Grosso do Sul",MG="Minas Gerais",PA="Pará",PB="Paraíba",PR="Paraná",PE="Pernambuco",PI="Piauí",RJ="Río de Janeiro",RN="Río Grande do Norte",RS="Río Grande do Sul",RO="Rondônia",RR="Roraima",SC="Santa Catarina",SP="São Paulo",SE="Sergipe",TO="Tocantins"],
+				D = Table.AddColumn(N, "customer_state_display", each [customer_state] & " — " & Record.FieldOrDefault(U,[customer_state],[customer_state]), type text)
+				in
+				D

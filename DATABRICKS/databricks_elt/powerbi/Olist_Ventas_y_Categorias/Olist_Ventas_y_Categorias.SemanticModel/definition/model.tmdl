@@ -1,0 +1,10 @@
+model Model
+	culture: es-PE
+	defaultPowerBIDataSourceVersion: powerBI_V3
+	sourceQueryCulture: en-US
+	discourageImplicitMeasures
+
+ref table Ventas
+ref table Calendario
+ref table Productos
+ref table Clientes

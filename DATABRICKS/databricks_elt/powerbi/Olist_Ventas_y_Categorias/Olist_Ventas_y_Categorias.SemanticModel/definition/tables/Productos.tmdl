@@ -1,0 +1,27 @@
+/// Categorías en español; valores nuevos mantienen un nombre legible.
+table Productos
+	column 'Id de producto'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: product_id
+	column Categoría
+		dataType: string
+		summarizeBy: none
+		sourceColumn: category_es
+	column 'Categoría original'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: product_category_name_english
+	partition Productos = m
+		mode: import
+		source =
+			let
+				Origen = DatabricksMultiCloud.Catalogs("dbc-e57b1425-f9ac.cloud.databricks.com", "/sql/1.0/warehouses/2d6b0ff07428989f", [Catalog=null, Database=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0"]),
+				Catalogo = Origen{[Name="olist_dev", Kind="Database"]}[Data],
+				Gold = Catalogo{[Name="gold", Kind="Schema"]}[Data],
+				B = Gold{[Name="dim_product", Kind="Table"]}[Data], N = Table.SelectColumns(B, {"product_id", "product_category_name_english"}), T = [health_beauty="Salud y belleza",computers_accessories="Computadoras y accesorios",auto="Automóviles",bed_bath_table="Cama, baño y mesa",furniture_decor="Muebles y decoración",sports_leisure="Deportes y ocio",perfumery="Perfumería",housewares="Artículos para el hogar",telephony="Telefonía",watches_gifts="Relojes y regalos",food_drink="Alimentos y bebidas",baby="Bebés",stationery="Papelería",tablets_printing_image="Tabletas e impresión",toys="Juguetes",fixed_telephony="Telefonía fija",garden_tools="Herramientas de jardín",fashion_bags_accessories="Bolsos y accesorios",small_appliances="Pequeños electrodomésticos",consoles_games="Consolas y videojuegos",audio="Audio",fashion_shoes="Calzado",cool_stuff="Artículos novedosos",luggage_accessories="Equipaje y accesorios",air_conditioning="Aire acondicionado",construction_tools_construction="Construcción",kitchen_dining_laundry_garden_furniture="Muebles de cocina y jardín",construction_tools_garden="Herramientas de jardín",fashion_male_clothing="Ropa masculina",pet_shop="Mascotas",office_furniture="Mobiliario de oficina",market_place="Marketplace",electronics="Electrónica",home_appliances="Electrodomésticos",party_supplies="Artículos para fiestas",home_confort="Confort del hogar",construction_tools_tools="Herramientas de construcción",agro_industry_and_commerce="Agroindustria y comercio",furniture_mattress_and_upholstery="Muebles y colchones",books_technical="Libros técnicos",home_construction="Construcción del hogar",musical_instruments="Instrumentos musicales",furniture_living_room="Muebles de sala",construction_tools_lights="Iluminación y construcción",industry_commerce_and_business="Industria y comercio",food="Alimentos",art="Arte",furniture_bedroom="Muebles de dormitorio",books_general_interest="Libros de interés general",construction_tools_safety="Seguridad en construcción",fashion_underwear_beach="Ropa interior y de playa",fashion_sport="Ropa deportiva",signaling_and_security="Señalización y seguridad",computers="Computadoras",christmas_supplies="Artículos navideños",fashio_female_clothing="Ropa femenina",home_appliances_2="Electrodomésticos varios",books_imported="Libros importados",drinks="Bebidas",cine_photo="Cine y fotografía",l_a_cuisine="Cocina",music="Música",home_comfort_2="Confort del hogar",small_appliances_home_oven_and_coffee="Hornos y cafeteras",cds_dvds_musicals="CD, DVD y música",dvds_blu_ray="DVD y Blu-ray",flowers="Flores",arts_and_craftmanship="Artes y manualidades",diapers_and_hygiene="Pañales e higiene",fashion_childrens_clothes="Ropa infantil",security_and_services="Seguridad y servicios"],
+				C = Table.AddColumn(N, "category_es", each if [product_category_name_english] = null or [product_category_name_english] = "" then "Sin categoría" else Record.FieldOrDefault(T,[product_category_name_english],Text.Proper(Text.Replace([product_category_name_english],"_"," "))), type text)
+				in
+				C

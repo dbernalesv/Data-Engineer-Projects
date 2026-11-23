@@ -1,0 +1,4 @@
+database Olist_Ventas_y_Categorias
+	compatibilityLevel: 1702
+	compatibilityMode: powerBI
+	language: 3082

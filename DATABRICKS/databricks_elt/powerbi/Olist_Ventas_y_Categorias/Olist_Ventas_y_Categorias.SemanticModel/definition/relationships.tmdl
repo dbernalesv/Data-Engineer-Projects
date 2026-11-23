@@ -1,0 +1,11 @@
+relationship 'Ventas por fecha'
+	fromColumn: Ventas.'Clave de fecha'
+	toColumn: Calendario.'Clave de fecha'
+
+relationship 'Ventas por producto'
+	fromColumn: Ventas.'Id de producto'
+	toColumn: Productos.'Id de producto'
+
+relationship 'Ventas por cliente'
+	fromColumn: Ventas.'Id de cliente'
+	toColumn: Clientes.'Id de cliente'

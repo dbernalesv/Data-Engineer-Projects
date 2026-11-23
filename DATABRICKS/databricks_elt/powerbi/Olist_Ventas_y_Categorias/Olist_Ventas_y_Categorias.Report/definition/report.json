@@ -1,0 +1,90 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/fabric/item/report/definition/report/3.3.0/schema.json",
+  "themeCollection": {
+    "baseTheme": {
+      "name": "Fluent2-CY26SU10",
+      "reportVersionAtImport": {
+        "visual": "2.11.0",
+        "report": "3.4.0",
+        "page": "2.3.1"
+      },
+      "type": "SharedResources"
+    },
+    "customTheme": {
+      "name": "OlistComercial-5f13c2a9.json",
+      "reportVersionAtImport": {
+        "visual": "2.11.0",
+        "report": "3.4.0",
+        "page": "2.3.1"
+      },
+      "type": "RegisteredResources"
+    }
+  },
+  "resourcePackages": [
+    {
+      "name": "SharedResources",
+      "type": "SharedResources",
+      "items": [
+        {
+          "name": "Fluent2-CY26SU10",
+          "path": "BaseThemes/Fluent2-CY26SU10.json",
+          "type": "BaseTheme"
+        }
+      ]
+    },
+    {
+      "name": "RegisteredResources",
+      "type": "RegisteredResources",
+      "items": [
+        {
+          "name": "OlistComercial-5f13c2a9.json",
+          "path": "OlistComercial-5f13c2a9.json",
+          "type": "CustomTheme"
+        },
+        {
+          "name": "olist_mensual_179540567900401.svg",
+          "path": "olist_mensual_179540567900401.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_pedidos_179540567900702.svg",
+          "path": "olist_pedidos_179540567900702.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_importe_179540567900903.svg",
+          "path": "olist_importe_179540567900903.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_ticket_179540567901004.svg",
+          "path": "olist_ticket_179540567901004.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_articulos_179540567901405.svg",
+          "path": "olist_articulos_179540567901405.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_categoria_179540567901706.svg",
+          "path": "olist_categoria_179540567901706.svg",
+          "type": "Image"
+        },
+        {
+          "name": "olist_uf_179540567901907.svg",
+          "path": "olist_uf_179540567901907.svg",
+          "type": "Image"
+        }
+      ]
+    }
+  ],
+  "settings": {
+    "useStylableVisualContainerHeader": true,
+    "exportDataMode": "AllowSummarized",
+    "defaultDrillFilterOtherVisuals": true,
+    "allowChangeFilterTypes": true,
+    "useEnhancedTooltips": true,
+    "useDefaultAggregateDisplayName": true
+  }
+}
