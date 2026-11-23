@@ -29,9 +29,9 @@ if SOURCE_ROOT not in sys.path:
 # MAGIC ## Cargar la configuración de Silver
 
 # COMMAND ----------
-from databricks_elt.process.silver.transform import transform_all
-from databricks_elt.utils.config_loader import load_yaml
-from databricks_elt.utils.logging_config import get_logger
+from process.silver.transform import transform_all
+from utils.config_loader import load_yaml
+from utils.logging_config import get_logger
 
 LOGGER = get_logger(__name__)
 COMMON_CONFIG = load_yaml(PROJECT_ROOT / "config" / "common.yml")
@@ -45,5 +45,8 @@ SILVER_CONFIG = load_yaml(PROJECT_ROOT / "config" / "silver.yml")
 # MAGIC Se consideran las imágenes posteriores a inserciones y actualizaciones; el `MERGE` evita duplicados y escrituras sin cambios.
 
 # COMMAND ----------
-transform_all(spark, PROJECT_ROOT, COMMON_CONFIG, SILVER_CONFIG)
+if not transform_all(spark, COMMON_CONFIG, SILVER_CONFIG):
+    message = "No se detectaron cambios elegibles en las tablas Bronze"
+    LOGGER.info(message)
+    dbutils.notebook.exit(message)
 LOGGER.info("Terminó la preparación de la capa Silver.")

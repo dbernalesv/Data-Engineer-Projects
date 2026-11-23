@@ -4,11 +4,10 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from functools import reduce
-from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
 
-from databricks_elt.utils.cdf import (
+from utils.cdf import (
     TableVersion,
     get_watermark,
     latest_change_images,
@@ -16,9 +15,8 @@ from databricks_elt.utils.cdf import (
     read_cdf_range,
     save_watermark,
 )
-from databricks_elt.utils.ddl import execute_ddl_directory
-from databricks_elt.utils.logging_config import get_logger
-from databricks_elt.utils.merge import merge_idempotently
+from utils.logging_config import get_logger
+from utils.merge import merge_idempotently
 
 LOGGER = get_logger(__name__)
 
@@ -54,22 +52,26 @@ def _read_inputs(
     changes: dict[str, DataFrame | None] = {}
 
     for key, name in source_names.items():
+        latest = latest_versions[key].version
+        watermark = watermarks[key]
         if bootstrap:
+            LOGGER.info("%s: Carga inicial desde la versión %s", name, latest)
             changes[key] = (
-                spark.read.option("versionAsOf", latest_versions[key].version)
+                spark.read.option("versionAsOf", latest)
                 .table(name)
             )
-        elif latest_versions[key].version > watermarks[key].version:
-            changes[key] = latest_change_images(
-                read_cdf_range(
-                    spark,
-                    name,
-                    watermarks[key].version + 1,
-                    latest_versions[key].version,
-                ),
+        elif watermark is not None and latest > watermark.version:
+            start = watermark.version + 1
+            LOGGER.info("%s: Leyendo CDF de la versión %s a la %s", name, start, latest)
+            changed = latest_change_images(
+                read_cdf_range(spark, name, start, latest),
                 list(source_tables[key]["primary_keys"]),
             )
+            changes[key] = None if changed.isEmpty() else changed
+            if changes[key] is None:
+                LOGGER.info("%s: CDF sin cambios elegibles; se actualiza el watermark", name)
         else:
+            LOGGER.info("%s: Sin cambios desde la versión %s", name, latest)
             changes[key] = None
 
     return source_names, latest_versions, watermarks, changes, bootstrap
@@ -137,7 +139,7 @@ def _affected_orders(
     changes: Mapping[str, DataFrame | None],
     product_ids: DataFrame | None,
     bootstrap: bool,
-) -> DataFrame:
+) -> DataFrame | None:
     if bootstrap:
         return current_orders.select("order_id").dropDuplicates(["order_id"])
 
@@ -169,7 +171,7 @@ def _affected_orders(
         )
 
     if not frames:
-        return current_orders.limit(0).select("order_id")
+        return None
     return _union_keys(frames, "order_id")
 
 
@@ -221,23 +223,10 @@ def _build_order_item_fact(
 
 def transform_all(
     spark: SparkSession,
-    project_root: Path,
     common_config: Mapping[str, str],
     gold_config: Mapping[str, object],
-) -> None:
+) -> bool:
     """Actualiza el modelo estrella y sus watermarks desde CDF de Silver."""
-    identifiers = {
-        "catalog": common_config["catalog"],
-        "control_schema": common_config["control_schema"],
-        "cdf_watermarks_table": common_config["cdf_watermarks_table"],
-        "gold_schema": common_config["gold_schema"],
-        "gold_cdf_watermarks_table": common_config[
-            "gold_cdf_watermarks_table"
-        ],
-    }
-    execute_ddl_directory(spark, project_root / "ddl" / "gold", identifiers)
-    execute_ddl_directory(spark, project_root / "ddl" / "control", identifiers)
-
     catalog = common_config["catalog"]
     schema = str(gold_config["target_schema"]).format(**common_config)
     watermark_table = (
@@ -248,14 +237,19 @@ def transform_all(
         spark, common_config, gold_config, watermark_table
     )
 
-    pending = bootstrap or any(
-        latest_versions[key].version > watermarks[key].version
-        for key in latest_versions
-        if watermarks[key] is not None
-    )
-    if not pending:
-        LOGGER.info("Gold ya está al día con las versiones de Silver")
-        return
+    def advance_watermarks() -> None:
+        for key, source_name in source_names.items():
+            watermark = watermarks[key]
+            if bootstrap or (watermark is not None and latest_versions[key].version > watermark.version):
+                target_table = gold_config["source_tables"][key]["gold_target"]
+                save_watermark(
+                    spark, watermark_table, source_name,
+                    f"{catalog}.{schema}.{target_table}", latest_versions[key],
+                )
+
+    if not bootstrap and not any(value is not None for value in changes.values()):
+        advance_watermarks()
+        return False
 
     if bootstrap:
         LOGGER.info("Cargando el modelo estrella desde el estado actual de Silver")
@@ -314,28 +308,18 @@ def transform_all(
         product_ids,
         bootstrap,
     )
-    order_dates = current_orders.join(affected_orders, "order_id")
-    dates = _build_date_dimension(order_dates)
-    merge_idempotently(spark, dates, target_names["date"], ["date_key"])
+    if affected_orders is not None:
+        order_dates = current_orders.join(affected_orders, "order_id")
+        dates = _build_date_dimension(order_dates)
+        if not dates.isEmpty():
+            merge_idempotently(spark, dates, target_names["date"], ["date_key"])
 
-    facts = _build_order_item_fact(current_orders, current_items, affected_orders)
-    merge_idempotently(
-        spark,
-        facts,
-        target_names["fact"],
-        ["order_id", "order_item_id"],
-    )
-
-    source_tables = gold_config["source_tables"]
-    for key, source_name in source_names.items():
-        if bootstrap or latest_versions[key].version > watermarks[key].version:
-            target_table = source_tables[key].get("gold_target", "gold_model")
-            save_watermark(
-                spark,
-                watermark_table,
-                source_name,
-                f"{catalog}.{schema}.{target_table}",
-                latest_versions[key],
+        facts = _build_order_item_fact(current_orders, current_items, affected_orders)
+        if not facts.isEmpty():
+            merge_idempotently(
+                spark, facts, target_names["fact"], ["order_id", "order_item_id"]
             )
 
+    advance_watermarks()
     LOGGER.info("Terminó la actualización incremental del modelo estrella Gold")
+    return True

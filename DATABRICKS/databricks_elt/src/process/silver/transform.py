@@ -3,31 +3,24 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
-from pathlib import Path
 
 from pyspark.sql import DataFrame, SparkSession, functions as F
 
-from databricks_elt.utils.cdf import (
+from utils.cdf import (
     get_watermark,
     latest_change_images,
     latest_table_version,
     read_cdf_range,
     save_watermark,
 )
-from databricks_elt.utils.ddl import execute_ddl_directory
-from databricks_elt.utils.logging_config import get_logger
-from databricks_elt.utils.merge import merge_idempotently
+from utils.logging_config import get_logger
+from utils.merge import merge_idempotently
 
 LOGGER = get_logger(__name__)
 _SQL_TYPES = {
     "integer": "INT",
     "decimal": "DECIMAL(12, 2)",
     "timestamp": "TIMESTAMP",
-}
-_LEGACY_COLUMNS = {
-    "_source_file",
-    "_bronze_commit_version",
-    "_bronze_commit_timestamp",
 }
 
 
@@ -81,7 +74,7 @@ def _prepare_table(
     target_name: str,
     watermark_table: str,
     table_config: Mapping[str, object],
-) -> None:
+) -> bool:
     keys = list(table_config.get("primary_keys", []))
     if not keys:
         raise ValueError(f"La tabla {target_name} debe declarar sus claves")
@@ -101,19 +94,21 @@ def _prepare_table(
         )
         cleaned = _silver_projection(snapshot, table_config["fields"])
         cleaned = _apply_quality_rules(cleaned, table_config).dropDuplicates(keys)
-        merge_idempotently(spark, cleaned, target_name, keys)
+        has_rows = not cleaned.isEmpty()
+        if has_rows:
+            merge_idempotently(spark, cleaned, target_name, keys)
         save_watermark(
             spark, watermark_table, source_name, target_name, latest
         )
-        return
+        return has_rows
 
     if latest.version <= watermark.version:
         LOGGER.info(
-            "%s ya está al día en la versión %s",
-            target_name,
+            "No se detectaron cambios en la tabla Bronze %s (versión %s)",
+            source_name,
             watermark.version,
         )
-        return
+        return False
 
     LOGGER.info(
         "Leyendo CDF de %s desde %s hasta %s",
@@ -127,85 +122,25 @@ def _prepare_table(
     )
     cleaned = _silver_projection(changes, table_config["fields"])
     cleaned = _apply_quality_rules(cleaned, table_config)
-    merge_idempotently(spark, cleaned, target_name, keys)
+    has_rows = not cleaned.isEmpty()
+    if has_rows:
+        merge_idempotently(spark, cleaned, target_name, keys)
+    else:
+        LOGGER.info("%s no tiene cambios elegibles; se actualiza el watermark", source_name)
     save_watermark(spark, watermark_table, source_name, target_name, latest)
     LOGGER.info("Terminó %s en la versión %s", target_name, latest.version)
-
-
-def _rebuild_legacy_tables(
-    spark: SparkSession,
-    project_root: Path,
-    identifiers: Mapping[str, str],
-    common_config: Mapping[str, str],
-    silver_config: Mapping[str, object],
-    tables: list[Mapping[str, object]],
-) -> None:
-    catalog = common_config["catalog"]
-    target_schema = str(silver_config["target_schema"]).format(**common_config)
-    watermark_table = (
-        f"{catalog}.{common_config['control_schema']}."
-        f"{common_config['cdf_watermarks_table']}"
-    )
-    legacy_tables = []
-
-    for table_config in tables:
-        target_name = f"{catalog}.{target_schema}.{table_config['target_table']}"
-        if not spark.catalog.tableExists(target_name):
-            continue
-        legacy = _LEGACY_COLUMNS.intersection(spark.table(target_name).columns)
-        if legacy:
-            legacy_tables.append((target_name, table_config["source_table"]))
-
-    if not legacy_tables:
-        return
-
-    for target_name, source_table in legacy_tables:
-        LOGGER.warning(
-            "Reconstruyendo %s desde Bronze para retirar columnas antiguas",
-            target_name,
-        )
-        spark.sql(f"DROP TABLE IF EXISTS {target_name}")
-        spark.sql(
-            f"DELETE FROM {watermark_table} "
-            f"WHERE source_table = '{catalog}.{common_config['bronze_schema']}."
-            f"{source_table}'"
-        )
-
-    execute_ddl_directory(spark, project_root / "ddl" / "silver", identifiers)
+    return has_rows
 
 
 def transform_all(
     spark: SparkSession,
-    project_root: Path,
     common_config: Mapping[str, str],
     silver_config: Mapping[str, object],
-) -> None:
+) -> bool:
     """Procesa CDF por rango y registra el avance de cada tabla."""
-    identifiers = {
-        "catalog": common_config["catalog"],
-        "gold_schema": common_config["gold_schema"],
-        "gold_cdf_watermarks_table": common_config[
-            "gold_cdf_watermarks_table"
-        ],
-        "silver_schema": common_config["silver_schema"],
-        "control_schema": common_config["control_schema"],
-        "cdf_watermarks_table": common_config["cdf_watermarks_table"],
-    }
-    execute_ddl_directory(spark, project_root / "ddl" / "silver", identifiers)
-    execute_ddl_directory(spark, project_root / "ddl" / "control", identifiers)
-
     tables = silver_config.get("tables", [])
     if not tables:
         raise ValueError("La configuración Silver debe incluir al menos una tabla")
-
-    _rebuild_legacy_tables(
-        spark,
-        project_root,
-        identifiers,
-        common_config,
-        silver_config,
-        tables,
-    )
 
     catalog = common_config["catalog"]
     source_schema = str(silver_config["source_schema"]).format(**common_config)
@@ -215,17 +150,20 @@ def transform_all(
         f"{common_config['cdf_watermarks_table']}"
     )
 
+    processed = False
     for table_config in tables:
         source_name = f"{catalog}.{source_schema}.{table_config['source_table']}"
         target_name = f"{catalog}.{target_schema}.{table_config['target_table']}"
         try:
-            _prepare_table(
+            updated = _prepare_table(
                 spark,
                 source_name,
                 target_name,
                 watermark_table,
                 table_config,
             )
+            processed = processed or updated
         except Exception:
             LOGGER.exception("Falló la preparación de %s", target_name)
             raise
+    return processed

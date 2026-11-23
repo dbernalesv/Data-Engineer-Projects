@@ -12,48 +12,47 @@ Proyecto individual de Diego Bernales para construir, por etapas, un flujo ELT c
 
 ## Fuente de datos
 
-El proyecto usa ocho CSV de Olist: pedidos, artículos, clientes, productos, pagos, reseñas, vendedores y traducción de categorías. Consulta la lista de archivos en [config/raw.yml](config/raw.yml).
+El proyecto usa ocho tipos de CSV de Olist. Los patrones de nombres y las carpetas de destino están en [config/bronze.yml](config/bronze.yml).
 
 El conjunto está publicado en [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). Al usarlo, respeta la atribución y las condiciones de su licencia CC BY-NC-SA 4.0.
 
-Descarga los CSV y déjalos en la bandeja `inbox/` del volumen Raw. El Job copia sus bytes originales a `olist/`, la carpeta que lee Auto Loader.
+Descarga los CSV y déjalos en la bandeja `inbox/` del volumen Raw. El Job conserva sus bytes y clasifica cada archivo en la subcarpeta que lee Auto Loader.
 
 ## Organización del proyecto
 
 - `config/`: parámetros comunes y configuración por capa.
+- `deploy/`: manifiestos con las rutas de los DDL que ejecuta Workflow Deployer.
 - `ddl/raw/`: sentencias SQL para crear el catálogo, el esquema de control y el volumen Raw.
 - `ddl/bronze/`: sentencias SQL para crear los esquemas, volúmenes y tablas Bronze.
 - `ddl/silver/`, `ddl/gold/` y `ddl/control/`: tablas de Silver, el esquema estrella y los watermarks CDF.
 - `notebooks/`: notebooks de entrada para cada capa.
-- `src/databricks_elt/process/`: lógica de ingesta y transformación reutilizable por capa.
-- `src/databricks_elt/utils/`: funciones para leer la configuración, escribir logs y ejecutar DDL.
+- `src/process/`: lógica de ingesta y transformación por capa.
+- `src/utils/`: funciones comunes para configuración, logs, DDL y CDF.
 - `resources/jobs/`: definición del Job del bundle.
 
 ## Preparación en Databricks
 
-Necesitas un workspace Databricks Free Edition con Unity Catalog y permisos para crear los esquemas, volúmenes y tablas Delta del proyecto. Si el catálogo `olist_dev` aún no existe, también necesitas el permiso `CREATE CATALOG`. En un workspace nuevo, crea el volumen con [el DDL de Raw](ddl/raw/00_create_volume.sql) usando los nombres de `config/common.yml`. Luego carga los ocho CSV originales, con sus nombres exactos, en:
+Necesitas un workspace Databricks Free Edition con Unity Catalog y permisos para crear los esquemas, volúmenes y tablas Delta. Si el catálogo `olist_dev` aún no existe, también necesitas `CREATE CATALOG`. Despliega el bundle para que Workflow Deployer cree las estructuras. Luego carga los CSV originales en:
 
 ```text
 /Volumes/olist_dev/control/olist_raw/inbox/
 ```
 
-La bandeja es el punto de entrada para los archivos planos de Olist. La descarga y el depósito inicial son manuales. Cada ejecución del Job valida que el lote esté completo y copia los archivos faltantes a `/Volumes/olist_dev/control/olist_raw/olist/`. Si un archivo ya existe y su SHA-256 coincide, la tarea lo omite. Si falta un archivo de entrada o el contenido del destino difiere, la tarea falla antes de iniciar Bronze. Los archivos de Raw se tratan como inmutables para conservar el seguimiento de Auto Loader.
+La descarga y el depósito inicial son manuales. Raw admite archivos individuales y los copia bajo `/Volumes/olist_dev/control/olist_raw/olist/`. Las subcarpetas son `orders`, `order_items`, `customers`, `products`, `order_payments`, `order_reviews`, `sellers` y `category_translation`. Si un archivo ya existe y su SHA-256 coincide, Raw lo omite. Si el contenido difiere, la tarea falla antes de publicar el lote de archivos pendiente.
 
 El catálogo del proyecto es `olist_dev`. El esquema `control` contiene los volúmenes `olist_raw` y `olist_state`, además de las tablas de watermarks; los esquemas `bronze`, `silver` y `gold` contienen las tablas Delta de cada capa. El DDL crea los objetos que falten y conserva los que ya existen.
 
 Auto Loader lee los CSV desde el volumen Raw y guarda su esquema y checkpoints bajo:
 
 ```text
-/Volumes/olist_dev/control/olist_state/autoloader/bronze/
+/Volumes/olist_dev/control/olist_state/autoloader/bronze/v2/
 ```
 
-Las tablas Bronze tienen nombres como `olist_dev.bronze.brz_orders`. Conservan los valores de origen como texto, agregan `_source_file` y `_ingested_at`, y guardan en `_rescued_data` los campos que no reconocen. El DDL habilita Change Data Feed (CDF) para que Silver pueda leer los cambios de Bronze.
+Cada tabla Bronze usa su subcarpeta y checkpoint. Si llega solo un archivo de artículos, la carga de filas corresponde a `olist_dev.bronze.brz_order_items`. Bronze conserva los valores de origen como texto, agrega `_source_file` y `_ingested_at`, y guarda en `_rescued_data` los campos que no reconoce. Workflow Deployer habilita Change Data Feed (CDF) para Silver.
 
-Silver crea tablas como `olist_dev.silver.slv_orders`. La primera ejecución carga una versión consistente de Bronze; las siguientes leen los cambios de CDF desde la versión guardada en `olist_dev.control.cdf_watermarks`. Se procesan `insert` y `update_postimage`, se convierten fechas y campos numéricos, se normalizan textos y se aplican reglas de calidad de `config/silver.yml`. Un `MERGE` por clave inserta o actualiza filas y evita escrituras si los valores no cambiaron. Silver conserva `_ingested_at`, pero no `_source_file` ni los metadatos de commit de Bronze.
+La primera ejecución de Silver carga una versión consistente de Bronze. Las siguientes leen por CDF desde la versión guardada en `olist_dev.control.cdf_watermarks`. Se procesan `insert` y `update_postimage`, se convierten fechas y campos numéricos, se normalizan textos y se aplican las reglas de `config/silver.yml`. Un `MERGE` por clave escribe solo filas nuevas o diferentes. Silver registra su estado en Delta mediante el watermark.
 
 La tabla `cdf_watermarks` guarda por tabla fuente y destino la última versión y timestamp procesados entre Bronze y Silver. `gold_cdf_watermarks` guarda el avance independiente de Gold al consumir Silver. Los watermarks avanzan después de los `MERGE`; si una ejecución se interrumpe antes, la próxima puede repetir el rango sin duplicar filas. En esta etapa no se procesan eventos `delete`.
-
-En la primera ejecución de esta versión, el proceso detecta las columnas antiguas en Silver, recrea esas tablas y las carga desde una versión actual de Bronze. Bronze no se elimina ni se modifica.
 
 ## Modelo dimensional Gold
 
@@ -69,14 +68,17 @@ Instala el [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/ins
 databricks auth login --host https://<workspace-url>
 databricks bundle validate -t dev
 databricks bundle deploy -t dev
+# Con los archivos de entrada ya disponibles:
 databricks bundle run -t dev elt_pipeline
 ```
 
-El bundle se despliega desde la rama local en la que estés trabajando hacia el único workspace, usando el target `dev`. Este flujo no requiere una Git Folder de Databricks. La configuración de autenticación se guarda fuera del repositorio.
+Cada despliegue ejecuta Workflow Deployer y espera su resultado. El manifiesto predeterminado, [deploy/initial.yml](deploy/initial.yml), contiene una lista ordenada `ddl_files` con rutas relativas a la raíz del bundle, por ejemplo `ddl/bronze/00_create_schemas_and_volumes.sql`. Puedes ejecutar el Deployer con otro YAML desplegado bajo `deploy/` mediante `databricks bundle run -t dev --params manifest_path=deploy/mi_cambio.yml workflow_deployer`.
 
 ## Revisar la ejecución
 
-Revisa el resultado de `raw_ingestion`: indica cuántos archivos se copiaron y cuántos ya existían. Al repetir el Job con el mismo lote, se esperan cero copias y ocho archivos existentes. Comprueba que las cuatro tareas finalicen correctamente y revisa las tablas de destino y sus watermarks.
+Raw informa cuántos archivos copió y cuántos ya existían. Bronze comprueba los archivos pendientes por tabla. Silver informa qué tablas de Bronze están al día y Gold muestra el rango CDF o la versión de cada insumo. Una tarea sin novedades termina correctamente, y las capas siguientes revisan sus propios watermarks.
+
+Para reconstruir un entorno, verifica y conserva primero sus CSV, pausa la programación, recrea las tablas de datos y control con Workflow Deployer e inicia Bronze con checkpoints nuevos. Carga el histórico y contrasta los conteos antes de incorporar archivos incrementales. Si se recrean las tablas Delta, también se reinician sus watermarks, porque las versiones nuevas pertenecen a otro historial. Reactiva la programación después de validar la carga.
 
 ## Abrir el informe de Power BI
 

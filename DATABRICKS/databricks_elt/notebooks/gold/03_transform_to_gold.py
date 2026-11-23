@@ -31,9 +31,9 @@ if SOURCE_ROOT not in sys.path:
 # MAGIC El modelo usa las tablas Silver y el esquema Gold definidos para el proyecto.
 
 # COMMAND ----------
-from databricks_elt.process.gold.transform import transform_all
-from databricks_elt.utils.config_loader import load_yaml
-from databricks_elt.utils.logging_config import get_logger
+from process.gold.transform import transform_all
+from utils.config_loader import load_yaml
+from utils.logging_config import get_logger
 
 LOGGER = get_logger(__name__)
 COMMON_CONFIG = load_yaml(PROJECT_ROOT / "config" / "common.yml")
@@ -46,5 +46,8 @@ GOLD_CONFIG = load_yaml(PROJECT_ROOT / "config" / "gold.yml")
 # MAGIC El hecho tiene una fila por artículo de pedido y se relaciona con cliente, producto, vendedor y fecha. Los cambios se aplican con `MERGE` idempotente.
 
 # COMMAND ----------
-transform_all(spark, PROJECT_ROOT, COMMON_CONFIG, GOLD_CONFIG)
+if not transform_all(spark, COMMON_CONFIG, GOLD_CONFIG):
+    message = "No se detectó cambio en ningún insumo, se finaliza la ejecución"
+    LOGGER.info(message)
+    dbutils.notebook.exit(message)
 LOGGER.info("Terminó la actualización de Gold.")

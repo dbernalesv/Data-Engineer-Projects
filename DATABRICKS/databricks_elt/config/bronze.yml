@@ -1,5 +1,5 @@
 source_dir: "/Volumes/{catalog}/{control_schema}/{raw_volume}/olist"
-state_dir: "/Volumes/{catalog}/{control_schema}/{state_volume}/autoloader/bronze"
+state_dir: "/Volumes/{catalog}/{control_schema}/{state_volume}/autoloader/bronze/v2"
 target_schema: "{bronze_schema}"
 file_format: csv
 header: true
@@ -8,17 +8,25 @@ multiline: true
 tables:
   - source_file_pattern: "olist_orders_dataset*.csv"
     target_table: brz_orders
+    subdirectory: orders
   - source_file_pattern: "olist_order_items_dataset*.csv"
     target_table: brz_order_items
+    subdirectory: order_items
   - source_file_pattern: "olist_customers_dataset*.csv"
     target_table: brz_customers
+    subdirectory: customers
   - source_file_pattern: "olist_products_dataset*.csv"
     target_table: brz_products
+    subdirectory: products
   - source_file_pattern: "olist_order_payments_dataset*.csv"
     target_table: brz_order_payments
+    subdirectory: order_payments
   - source_file_pattern: "olist_order_reviews_dataset*.csv"
     target_table: brz_order_reviews
+    subdirectory: order_reviews
   - source_file_pattern: "olist_sellers_dataset*.csv"
     target_table: brz_sellers
+    subdirectory: sellers
   - source_file_pattern: "product_category_name_translation*.csv"
     target_table: brz_category_translation
+    subdirectory: category_translation

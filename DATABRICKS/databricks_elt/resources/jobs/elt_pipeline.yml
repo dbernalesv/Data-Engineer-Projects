@@ -47,4 +47,4 @@ resources:
       schedule:
         quartz_cron_expression: "0 0 8 ? * MON"
         timezone_id: America/Lima
-        pause_status: UNPAUSED
+        pause_status: ${var.pipeline_pause_status}

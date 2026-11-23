@@ -2,7 +2,8 @@
 table Ventas
 	measure 'Importe artículos + flete' = SUM(Ventas[Importe artículo y flete])
 		formatString: R$ #,##0.00
-	measure 'Promedio mensual' = AVERAGEX(INTERSECT(CALCULATETABLE(VALUES(Calendario[Año-Mes]), REMOVEFILTERS(Calendario), Calendario[Año-Mes] >= "2016-09", Calendario[Año-Mes] <= "2018-09"), VALUES(Calendario[Año-Mes])), COALESCE(CALCULATE([Importe artículos + flete]), 0))
+	/// Promedia los meses visibles del calendario e incluye con cero los meses sin ventas.
+	measure 'Promedio mensual' = AVERAGEX(FILTER(VALUES(Calendario[Año-Mes]), NOT ISBLANK(Calendario[Año-Mes])), COALESCE([Importe artículos + flete], 0))
 		formatString: R$ #,##0.00
 	measure '# Pedidos' = DISTINCTCOUNT(Ventas[Id de pedido])
 		formatString: #,##0
@@ -14,7 +15,45 @@ table Ventas
 		formatString: R$ #,##0.00
 	measure 'Ticket medio por UF' = AVERAGEX(VALUES(Clientes[UF del cliente]), [Ticket promedio])
 		formatString: R$ #,##0.00
-	measure 'Ranking ticket categoría' = RANKX(ALLSELECTED(Productos[Categoría]), [Ticket promedio], , DESC, DENSE)
+	/// En caso de empate, el nombre de la categoría decide el orden.
+	measure 'Ranking importe categoría' = ```
+			VAR _categoria = SELECTEDVALUE(Productos[Categoría])
+			VAR _valor = [Importe artículos + flete]
+			VAR _categorias =
+			    ADDCOLUMNS(ALLSELECTED(Productos[Categoría]), "@Valor", [Importe artículos + flete])
+			RETURN
+			    IF(
+			        NOT ISBLANK(_valor) && HASONEVALUE(Productos[Categoría]),
+			        1 + COUNTROWS(
+			            FILTER(
+			                _categorias,
+			                NOT ISBLANK([@Valor])
+			                    && ([@Valor] > _valor
+			                        || ([@Valor] = _valor && Productos[Categoría] < _categoria))
+			            )
+			        )
+			    )
+			```
+		formatString: #,##0
+
+	measure 'Ranking ticket categoría' = ```
+			VAR _categoria = SELECTEDVALUE(Productos[Categoría])
+			VAR _valor = [Ticket promedio]
+			VAR _categorias =
+			    ADDCOLUMNS(ALLSELECTED(Productos[Categoría]), "@Valor", [Ticket promedio])
+			RETURN
+			    IF(
+			        NOT ISBLANK(_valor) && HASONEVALUE(Productos[Categoría]),
+			        1 + COUNTROWS(
+			            FILTER(
+			                _categorias,
+			                NOT ISBLANK([@Valor])
+			                    && ([@Valor] > _valor
+			                        || ([@Valor] = _valor && Productos[Categoría] < _categoria))
+			            )
+			        )
+			    )
+			```
 		formatString: #,##0
 
 	column 'Id de pedido'

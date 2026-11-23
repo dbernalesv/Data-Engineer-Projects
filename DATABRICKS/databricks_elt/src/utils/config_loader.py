@@ -7,7 +7,7 @@ from typing import Any
 
 import yaml
 
-from databricks_elt.utils.logging_config import get_logger
+from utils.logging_config import get_logger
 
 LOGGER = get_logger(__name__)
 

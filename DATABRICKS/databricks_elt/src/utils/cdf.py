@@ -8,7 +8,7 @@ from typing import NamedTuple
 from pyspark.sql import DataFrame, SparkSession, functions as F
 from pyspark.sql.window import Window
 
-from databricks_elt.utils.merge import merge_idempotently
+from utils.merge import merge_idempotently
 
 
 class TableVersion(NamedTuple):

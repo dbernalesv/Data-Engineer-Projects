@@ -11,3 +11,4 @@ dependencies = ["PyYAML==6.0.3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
+include = ["process", "process.*", "utils", "utils.*"]
