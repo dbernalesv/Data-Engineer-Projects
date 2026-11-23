@@ -10,7 +10,16 @@ resources:
             dependencies:
               - "PyYAML==6.0.3"
       tasks:
+        - task_key: raw_ingestion
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/raw/00_ingest_to_raw.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
         - task_key: bronze_ingestion
+          depends_on:
+            - task_key: raw_ingestion
           environment_key: serverless
           notebook_task:
             notebook_path: ../../notebooks/bronze/01_ingest_to_bronze.py

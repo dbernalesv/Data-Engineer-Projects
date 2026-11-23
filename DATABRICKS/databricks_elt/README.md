@@ -4,22 +4,24 @@ Proyecto individual de Diego Bernales para construir, por etapas, un flujo ELT c
 
 ## Avance
 
-- Etapas implementadas: carga de Raw a Bronze, transformación de Bronze a Silver y modelo dimensional Gold.
+- El Job ejecuta cuatro tareas en orden: Raw, Bronze, Silver y Gold.
+- Frecuencia prevista: cada lunes a las 8:00 a. m., hora de Lima (`America/Lima`).
 - Rama de trabajo: `feature/databricks`.
 - Gold se construye como un esquema estrella y consume cambios de Silver por CDF.
 - Los archivos de datos se guardan en Databricks; no se versionan en Git.
 
 ## Fuente de datos
 
-El proyecto usa ocho CSV de Olist: pedidos, artículos, clientes, productos, pagos, reseñas, vendedores y traducción de categorías. El archivo de geolocalización queda fuera de esta primera etapa porque no se necesita para la carga inicial.
+El proyecto usa ocho CSV de Olist: pedidos, artículos, clientes, productos, pagos, reseñas, vendedores y traducción de categorías. Consulta la lista de archivos en [config/raw.yml](config/raw.yml).
 
 El conjunto está publicado en [Kaggle](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce). Al usarlo, respeta la atribución y las condiciones de su licencia CC BY-NC-SA 4.0.
 
-Descarga los CSV y súbelos a la carpeta `olist/` del volumen Raw. No agregues los datos al repositorio.
+Descarga los CSV y déjalos en la bandeja `inbox/` del volumen Raw. El Job copia sus bytes originales a `olist/`, la carpeta que lee Auto Loader.
 
 ## Organización del proyecto
 
 - `config/`: parámetros comunes y configuración por capa.
+- `ddl/raw/`: sentencias SQL para crear el catálogo, el esquema de control y el volumen Raw.
 - `ddl/bronze/`: sentencias SQL para crear los esquemas, volúmenes y tablas Bronze.
 - `ddl/silver/`, `ddl/gold/` y `ddl/control/`: tablas de Silver, el esquema estrella y los watermarks CDF.
 - `notebooks/`: notebooks de entrada para cada capa.
@@ -29,11 +31,13 @@ Descarga los CSV y súbelos a la carpeta `olist/` del volumen Raw. No agregues l
 
 ## Preparación en Databricks
 
-Necesitas un workspace Databricks Free Edition con Unity Catalog y permisos para crear los esquemas, volúmenes y tablas Delta del proyecto. Si el catálogo `olist_dev` aún no existe, también necesitas el permiso `CREATE CATALOG`. Antes de ejecutar el Job, carga los ocho CSV en:
+Necesitas un workspace Databricks Free Edition con Unity Catalog y permisos para crear los esquemas, volúmenes y tablas Delta del proyecto. Si el catálogo `olist_dev` aún no existe, también necesitas el permiso `CREATE CATALOG`. En un workspace nuevo, crea el volumen con [el DDL de Raw](ddl/raw/00_create_volume.sql) usando los nombres de `config/common.yml`. Luego carga los ocho CSV originales, con sus nombres exactos, en:
 
 ```text
-/Volumes/olist_dev/control/olist_raw/olist/
+/Volumes/olist_dev/control/olist_raw/inbox/
 ```
+
+La bandeja es el punto de entrada para los archivos planos de Olist. La descarga y el depósito inicial son manuales. Cada ejecución del Job valida que el lote esté completo y copia los archivos faltantes a `/Volumes/olist_dev/control/olist_raw/olist/`. Si un archivo ya existe y su SHA-256 coincide, la tarea lo omite. Si falta un archivo de entrada o el contenido del destino difiere, la tarea falla antes de iniciar Bronze. Los archivos de Raw se tratan como inmutables para conservar el seguimiento de Auto Loader.
 
 El catálogo del proyecto es `olist_dev`. El esquema `control` contiene los volúmenes `olist_raw` y `olist_state`, además de las tablas de watermarks; los esquemas `bronze`, `silver` y `gold` contienen las tablas Delta de cada capa. El DDL crea los objetos que falten y conserva los que ya existen.
 
@@ -70,6 +74,10 @@ databricks bundle run -t dev elt_pipeline
 
 El bundle se despliega desde la rama local en la que estés trabajando hacia el único workspace, usando el target `dev`. Este flujo no requiere una Git Folder de Databricks. La configuración de autenticación se guarda fuera del repositorio.
 
-## Revisión de Bronze y Silver
+## Revisar la ejecución
 
-Al terminar el Job, revisa el estado de ambas tareas, las tablas de destino y los watermarks. Bronze conserva los valores de origen; Silver presenta fechas y métricas con tipos consistentes, textos normalizados y claves sin duplicados. Auto Loader guarda sus checkpoints en el volumen `olist_state`; Silver usa la tabla `cdf_watermarks` para continuar desde la última versión procesada.
+Revisa el resultado de `raw_ingestion`: indica cuántos archivos se copiaron y cuántos ya existían. Al repetir el Job con el mismo lote, se esperan cero copias y ocho archivos existentes. Comprueba que las cuatro tareas finalicen correctamente y revisa las tablas de destino y sus watermarks.
+
+## Abrir el informe de Power BI
+
+Abre [Olist_Ventas_y_Categorias.pbip](powerbi/Olist_Ventas_y_Categorias/Olist_Ventas_y_Categorias.pbip) en Power BI Desktop. El informe consulta Gold en modo Import. Para actualizarlo, autentícate en el SQL Warehouse desde Desktop y selecciona **Inicio → Actualizar**. Consulta [la guía del informe](powerbi/Olist_Ventas_y_Categorias/README.md) para ver las páginas y las definiciones de los indicadores.

@@ -54,6 +54,8 @@ IDENTIFIERS = {
 # MAGIC El DDL es idempotente: si los esquemas, volúmenes o tablas ya existen, se conservan.
 
 # COMMAND ----------
+execute_ddl_directory(spark, PROJECT_ROOT / "ddl" / "raw", IDENTIFIERS)
+
 execute_ddl_directory(
     spark,
     PROJECT_ROOT / "ddl" / "bronze",
