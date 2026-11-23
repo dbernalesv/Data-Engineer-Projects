@@ -35,3 +35,7 @@ resources:
             source: WORKSPACE
             base_parameters:
               project_root: ${workspace.file_path}
+      schedule:
+        quartz_cron_expression: "0 0 8 ? * MON"
+        timezone_id: America/Lima
+        pause_status: UNPAUSED
