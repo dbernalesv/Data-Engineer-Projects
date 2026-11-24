@@ -1,0 +1,62 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Databricks: verificar perfil",
+      "type": "process",
+      "command": "databricks",
+      "args": ["auth", "describe", "--profile", "diego-free"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "problemMatcher": []
+    },
+    {
+      "label": "Databricks: validar bundle (dev)",
+      "type": "process",
+      "command": "databricks",
+      "args": ["bundle", "validate", "-t", "dev", "--profile", "diego-free"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Databricks: revisar plan (dev)",
+      "type": "process",
+      "command": "databricks",
+      "args": ["bundle", "plan", "-t", "dev", "--profile", "diego-free"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Databricks: desplegar bundle (dev)",
+      "type": "process",
+      "command": "databricks",
+      "args": ["bundle", "deploy", "-t", "dev", "--profile", "diego-free"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Databricks: ejecutar ELT (dev)",
+      "type": "process",
+      "command": "databricks",
+      "args": ["bundle", "run", "-t", "dev", "--profile", "diego-free", "elt_pipeline"],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    },
+    {
+      "label": "Databricks: ejecutar Workflow Deployer (dev)",
+      "type": "process",
+      "command": "databricks",
+      "args": [
+        "bundle", "run", "-t", "dev", "--profile", "diego-free",
+        "--params", "manifest_path=deploy/initial.yml", "workflow_deployer"
+      ],
+      "options": { "cwd": "${workspaceFolder}" },
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

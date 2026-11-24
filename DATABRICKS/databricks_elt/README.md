@@ -62,17 +62,19 @@ El proceso Gold consume CDF de pedidos, artículos, clientes, productos, vendedo
 
 ## Desplegar desde PowerShell
 
-Instala el [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install). Desde `DATABRICKS/databricks_elt/`, inicia sesión con OAuth y luego valida, despliega y ejecuta el bundle en el workspace:
+Instala el [Databricks CLI](https://docs.databricks.com/aws/en/dev-tools/cli/install). Desde `DATABRICKS/databricks_elt/`, inicia sesión con OAuth y usa el mismo perfil con `--profile` en cada comando. Sustituye `<workspace-url>` por la URL de tu workspace si necesitas crear o renovar el perfil:
 
 ```powershell
-databricks auth login --host https://<workspace-url>
-databricks bundle validate -t dev
-databricks bundle deploy -t dev
+databricks auth login --host "https://<workspace-url>" --profile diego-free
+databricks auth describe --profile diego-free
+databricks bundle validate -t dev --profile diego-free
+databricks bundle plan -t dev --profile diego-free
+databricks bundle deploy -t dev --profile diego-free
 # Con los archivos de entrada ya disponibles:
-databricks bundle run -t dev elt_pipeline
+databricks bundle run -t dev --profile diego-free elt_pipeline
 ```
 
-Cada despliegue ejecuta Workflow Deployer y espera su resultado. El manifiesto predeterminado, [deploy/initial.yml](deploy/initial.yml), contiene una lista ordenada `ddl_files` con rutas relativas a la raíz del bundle, por ejemplo `ddl/bronze/00_create_schemas_and_volumes.sql`. Puedes ejecutar el Deployer con otro YAML desplegado bajo `deploy/` mediante `databricks bundle run -t dev --params manifest_path=deploy/mi_cambio.yml workflow_deployer`.
+Cada despliegue ejecuta Workflow Deployer y espera su resultado. El manifiesto predeterminado, [deploy/initial.yml](deploy/initial.yml), contiene una lista ordenada `ddl_files` con rutas relativas a la raíz del bundle, por ejemplo `ddl/bronze/00_create_schemas_and_volumes.sql`. Puedes ejecutar el Deployer con otro YAML desplegado bajo `deploy/` mediante `databricks bundle run -t dev --profile diego-free --params manifest_path=deploy/mi_cambio.yml workflow_deployer`.
 
 ## Revisar la ejecución
 
