@@ -18,4 +18,4 @@ El PDF resultante será `main.pdf`. El código fuente no depende de archivos fue
 - `main.tex`: diapositivas, diagramas y gráficos vectoriales.
 - `assets/`: capturas de las dos páginas del informe Power BI, con filtro diciembre de 2018.
 
-La extensión de noviembre y diciembre de 2018 se identifica como sintética. El lote de enero de 2019 se agregará a `inbox/` solo después de generarlo y validar sus valores esperados; sus cifras no se anticipan en estas diapositivas.
+La extensión de noviembre y diciembre de 2018 se identifica como sintética. El lote de enero de 2019 también es sintético, fue generado y validado para la demostración, y sus CSV están en `/Volumes/olist_dev/control/olist_raw/inbox/`. El lote no se versiona en Git y sus cifras no se anticipan en estas diapositivas.
