@@ -1,0 +1,44 @@
+/// Calendario continuo que incluye los meses sin ventas.
+table Calendario
+	dataCategory: Time
+	column 'Clave de fecha'
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: date_key
+	column Fecha
+		dataType: dateTime
+		formatString: d mmmm yyyy
+		summarizeBy: none
+		sourceColumn: full_date
+	column 'Año-Mes'
+		dataType: string
+		summarizeBy: none
+		sortByColumn: 'Orden año mes'
+		sourceColumn: 'Año-Mes'
+	column 'Orden año mes'
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: 'Orden año mes'
+	partition Calendario = m
+		mode: import
+		source =
+			let
+				Origen = DatabricksMultiCloud.Catalogs("dbc-e57b1425-f9ac.cloud.databricks.com", "/sql/1.0/warehouses/2d6b0ff07428989f", [Catalog=null, Database=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0"]),
+				Catalogo = Origen{[Name="olist_dev", Kind="Database"]}[Data],
+				Gold = Catalogo{[Name="gold", Kind="Schema"]}[Data],
+				B = Gold{[Name="dim_date", Kind="Table"]}[Data],
+				F = Gold{[Name="fct_order_items", Kind="Table"]}[Data],
+				MinKey = List.Min(F[order_date_key]), MaxKey = List.Max(F[order_date_key]),
+				DesdeFecha = Date.From(Table.SelectRows(B, each [date_key] = MinKey){0}[full_date]),
+				HastaFecha = Date.From(Table.SelectRows(B, each [date_key] = MaxKey){0}[full_date]),
+				Desde = Date.StartOfMonth(DesdeFecha), Hasta = Date.EndOfMonth(HastaFecha),
+				Fechas = List.Dates(Desde, Duration.Days(Hasta-Desde)+1, #duration(1,0,0,0)),
+				T = Table.FromList(Fechas, Splitter.SplitByNothing(), {"full_date"}, null, ExtraValues.Error),
+				K = Table.AddColumn(T, "date_key", each Date.Year([full_date])*10000+Date.Month([full_date])*100+Date.Day([full_date]), Int64.Type),
+				M = Table.AddColumn(K, "Año-Mes", each Date.ToText([full_date], [Format="yyyy-MM", Culture="es-ES"]), type text),
+				O = Table.AddColumn(M, "Orden año mes", each Date.Year([full_date])*100+Date.Month([full_date]), Int64.Type),
+				R = Table.SelectColumns(O, {"date_key","full_date","Año-Mes","Orden año mes"})
+				in
+				R

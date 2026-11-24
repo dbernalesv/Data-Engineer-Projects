@@ -1,0 +1,110 @@
+source_schema: "{bronze_schema}"
+target_schema: "{silver_schema}"
+
+tables:
+  - source_table: brz_orders
+    target_table: slv_orders
+    primary_keys: [order_id]
+    required_fields: [order_id, customer_id, order_purchase_timestamp]
+    fields:
+      - {source: order_id, target: order_id, type: string}
+      - {source: customer_id, target: customer_id, type: string}
+      - {source: order_status, target: order_status, type: string, normalize: lower}
+      - {source: order_purchase_timestamp, target: order_purchase_timestamp, type: timestamp}
+      - {source: order_approved_at, target: order_approved_at, type: timestamp}
+      - {source: order_delivered_carrier_date, target: order_delivered_carrier_date, type: timestamp}
+      - {source: order_delivered_customer_date, target: order_delivered_customer_date, type: timestamp}
+      - {source: order_estimated_delivery_date, target: order_estimated_delivery_date, type: timestamp}
+
+  - source_table: brz_order_items
+    target_table: slv_order_items
+    primary_keys: [order_id, order_item_id]
+    required_fields: [order_id, order_item_id, product_id, seller_id]
+    non_negative_fields: [price, freight_value]
+    fields:
+      - {source: order_id, target: order_id, type: string}
+      - {source: order_item_id, target: order_item_id, type: integer}
+      - {source: product_id, target: product_id, type: string}
+      - {source: seller_id, target: seller_id, type: string}
+      - {source: shipping_limit_date, target: shipping_limit_date, type: timestamp}
+      - {source: price, target: price, type: decimal}
+      - {source: freight_value, target: freight_value, type: decimal}
+
+  - source_table: brz_customers
+    target_table: slv_customers
+    primary_keys: [customer_id]
+    required_fields: [customer_id, customer_unique_id]
+    fields:
+      - {source: customer_id, target: customer_id, type: string}
+      - {source: customer_unique_id, target: customer_unique_id, type: string}
+      - {source: customer_zip_code_prefix, target: customer_zip_code_prefix, type: string}
+      - {source: customer_city, target: customer_city, type: string, normalize: lower}
+      - {source: customer_state, target: customer_state, type: string, normalize: upper}
+
+  - source_table: brz_products
+    target_table: slv_products
+    primary_keys: [product_id]
+    required_fields: [product_id]
+    non_negative_fields:
+      - product_name_length
+      - product_description_length
+      - product_photos_qty
+      - product_weight_g
+      - product_length_cm
+      - product_height_cm
+      - product_width_cm
+    fields:
+      - {source: product_id, target: product_id, type: string}
+      - {source: product_category_name, target: product_category_name, type: string, normalize: lower}
+      - {source: product_name_lenght, target: product_name_length, type: integer}
+      - {source: product_description_lenght, target: product_description_length, type: integer}
+      - {source: product_photos_qty, target: product_photos_qty, type: integer}
+      - {source: product_weight_g, target: product_weight_g, type: integer}
+      - {source: product_length_cm, target: product_length_cm, type: integer}
+      - {source: product_height_cm, target: product_height_cm, type: integer}
+      - {source: product_width_cm, target: product_width_cm, type: integer}
+
+  - source_table: brz_order_payments
+    target_table: slv_order_payments
+    primary_keys: [order_id, payment_sequential]
+    required_fields: [order_id, payment_sequential]
+    non_negative_fields: [payment_installments, payment_value]
+    fields:
+      - {source: order_id, target: order_id, type: string}
+      - {source: payment_sequential, target: payment_sequential, type: integer}
+      - {source: payment_type, target: payment_type, type: string, normalize: lower}
+      - {source: payment_installments, target: payment_installments, type: integer}
+      - {source: payment_value, target: payment_value, type: decimal}
+
+  - source_table: brz_order_reviews
+    target_table: slv_order_reviews
+    primary_keys: [review_id, order_id]
+    required_fields: [review_id, order_id, review_score]
+    ranges:
+      - {field: review_score, minimum: 1, maximum: 5}
+    fields:
+      - {source: review_id, target: review_id, type: string}
+      - {source: order_id, target: order_id, type: string}
+      - {source: review_score, target: review_score, type: integer}
+      - {source: review_comment_title, target: review_comment_title, type: string}
+      - {source: review_comment_message, target: review_comment_message, type: string}
+      - {source: review_creation_date, target: review_creation_date, type: timestamp}
+      - {source: review_answer_timestamp, target: review_answer_timestamp, type: timestamp}
+
+  - source_table: brz_sellers
+    target_table: slv_sellers
+    primary_keys: [seller_id]
+    required_fields: [seller_id]
+    fields:
+      - {source: seller_id, target: seller_id, type: string}
+      - {source: seller_zip_code_prefix, target: seller_zip_code_prefix, type: string}
+      - {source: seller_city, target: seller_city, type: string, normalize: lower}
+      - {source: seller_state, target: seller_state, type: string, normalize: upper}
+
+  - source_table: brz_category_translation
+    target_table: slv_category_translation
+    primary_keys: [product_category_name]
+    required_fields: [product_category_name, product_category_name_english]
+    fields:
+      - {source: product_category_name, target: product_category_name, type: string, normalize: lower}
+      - {source: product_category_name_english, target: product_category_name_english, type: string, normalize: lower}

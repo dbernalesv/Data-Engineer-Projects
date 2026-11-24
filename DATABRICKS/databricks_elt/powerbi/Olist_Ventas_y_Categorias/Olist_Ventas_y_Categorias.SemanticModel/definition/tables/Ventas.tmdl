@@ -1,0 +1,124 @@
+/// Cada fila representa un artículo; el importe suma precio y flete de su línea.
+table Ventas
+	measure 'Importe artículos + flete' = SUM(Ventas[Importe artículo y flete])
+		formatString: R$ #,##0.00
+	/// Promedia los meses visibles del calendario e incluye con cero los meses sin ventas.
+	measure 'Promedio mensual' = AVERAGEX(FILTER(VALUES(Calendario[Año-Mes]), NOT ISBLANK(Calendario[Año-Mes])), COALESCE([Importe artículos + flete], 0))
+		formatString: R$ #,##0.00
+	measure '# Pedidos' = DISTINCTCOUNT(Ventas[Id de pedido])
+		formatString: #,##0
+	measure 'Artículos vendidos' = SUM(Ventas[Cantidad de artículos])
+		formatString: #,##0
+	measure 'Ticket promedio' = DIVIDE([Importe artículos + flete], [# Pedidos])
+		formatString: R$ #,##0.00
+	measure 'Ticket medio por categoría' = AVERAGEX(VALUES(Productos[Categoría]), [Ticket promedio])
+		formatString: R$ #,##0.00
+	measure 'Ticket medio por UF' = AVERAGEX(VALUES(Clientes[UF del cliente]), [Ticket promedio])
+		formatString: R$ #,##0.00
+	/// En caso de empate, el nombre de la categoría decide el orden.
+	measure 'Ranking importe categoría' = ```
+			VAR _categoria = SELECTEDVALUE(Productos[Categoría])
+			VAR _valor = [Importe artículos + flete]
+			VAR _categorias =
+			    ADDCOLUMNS(ALLSELECTED(Productos[Categoría]), "@Valor", [Importe artículos + flete])
+			RETURN
+			    IF(
+			        NOT ISBLANK(_valor) && HASONEVALUE(Productos[Categoría]),
+			        1 + COUNTROWS(
+			            FILTER(
+			                _categorias,
+			                NOT ISBLANK([@Valor])
+			                    && ([@Valor] > _valor
+			                        || ([@Valor] = _valor && Productos[Categoría] < _categoria))
+			            )
+			        )
+			    )
+			```
+		formatString: #,##0
+
+	measure 'Ranking ticket categoría' = ```
+			VAR _categoria = SELECTEDVALUE(Productos[Categoría])
+			VAR _valor = [Ticket promedio]
+			VAR _categorias =
+			    ADDCOLUMNS(ALLSELECTED(Productos[Categoría]), "@Valor", [Ticket promedio])
+			RETURN
+			    IF(
+			        NOT ISBLANK(_valor) && HASONEVALUE(Productos[Categoría]),
+			        1 + COUNTROWS(
+			            FILTER(
+			                _categorias,
+			                NOT ISBLANK([@Valor])
+			                    && ([@Valor] > _valor
+			                        || ([@Valor] = _valor && Productos[Categoría] < _categoria))
+			            )
+			        )
+			    )
+			```
+		formatString: #,##0
+
+	column 'Id de pedido'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: order_id
+	column 'Id de artículo'
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: order_item_id
+	column 'Id de cliente'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: customer_id
+	column 'Id de producto'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: product_id
+	column 'Clave de fecha'
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: order_date_key
+	column 'Estado del pedido'
+		dataType: string
+		summarizeBy: none
+		sourceColumn: order_status_display
+	column 'Estado original del pedido'
+		dataType: string
+		isHidden
+		summarizeBy: none
+		sourceColumn: order_status
+	column 'Precio del artículo'
+		dataType: decimal
+		isHidden
+		summarizeBy: none
+		sourceColumn: item_price
+	column Flete
+		dataType: decimal
+		isHidden
+		summarizeBy: none
+		sourceColumn: freight_value
+	column 'Importe artículo y flete'
+		dataType: decimal
+		isHidden
+		summarizeBy: none
+		sourceColumn: total_item_amount
+	column 'Cantidad de artículos'
+		dataType: int64
+		isHidden
+		summarizeBy: none
+		sourceColumn: item_quantity
+	partition Ventas = m
+		mode: import
+		source =
+			let
+				Origen = DatabricksMultiCloud.Catalogs("dbc-e57b1425-f9ac.cloud.databricks.com", "/sql/1.0/warehouses/2d6b0ff07428989f", [Catalog=null, Database=null, EnableAutomaticProxyDiscovery=null, Implementation="2.0"]),
+				Catalogo = Origen{[Name="olist_dev", Kind="Database"]}[Data],
+				Gold = Catalogo{[Name="gold", Kind="Schema"]}[Data],
+				B = Gold{[Name="fct_order_items", Kind="Table"]}[Data],
+				N = Table.SelectColumns(B, {"order_id","order_item_id","customer_id","product_id","order_date_key","order_status","item_price","freight_value","total_item_amount","item_quantity"}), S = [created="Creado",approved="Pago aprobado",invoiced="Factura emitida",processing="En preparación",shipped="Enviado al transportista",delivered="Entregado al cliente",unavailable="Producto no disponible",canceled="Cancelado"],
+				D = Table.AddColumn(N, "order_status_display", each Record.FieldOrDefault(S,[order_status],[order_status] & " — Estado no documentado"), type text)
+				in
+				D

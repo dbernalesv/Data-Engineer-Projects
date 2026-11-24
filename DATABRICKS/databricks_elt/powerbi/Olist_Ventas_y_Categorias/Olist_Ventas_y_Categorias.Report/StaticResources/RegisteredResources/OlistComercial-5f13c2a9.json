@@ -1,0 +1,37 @@
+{
+  "name": "OlistComercial-5f13c2a9.json",
+  "dataColors": [
+    "#087E8B",
+    "#FF8C42",
+    "#126782",
+    "#6BB7A8",
+    "#355070",
+    "#F6AE2D",
+    "#5B8E7D"
+  ],
+  "background": "#F3F6F8",
+  "foreground": "#102A43",
+  "tableAccent": "#087E8B",
+  "textClasses": {
+    "title": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 20,
+      "color": "#102A43"
+    },
+    "header": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 13,
+      "color": "#102A43"
+    },
+    "callout": {
+      "fontFace": "Segoe UI Semibold",
+      "fontSize": 27,
+      "color": "#102A43"
+    },
+    "label": {
+      "fontFace": "Segoe UI",
+      "fontSize": 11,
+      "color": "#526777"
+    }
+  }
+}

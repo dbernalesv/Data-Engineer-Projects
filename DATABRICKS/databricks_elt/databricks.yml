@@ -1,0 +1,24 @@
+bundle:
+  name: databricks_elt
+  engine: direct
+
+variables:
+  pipeline_pause_status:
+    default: UNPAUSED
+
+include:
+  - resources/jobs/*.yml
+
+sync:
+  include:
+    - config/**
+    - ddl/**
+    - deploy/**
+    - notebooks/**
+    - pyproject.toml
+    - src/**
+
+targets:
+  dev:
+    default: true
+    mode: development

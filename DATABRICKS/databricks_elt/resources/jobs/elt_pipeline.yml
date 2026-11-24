@@ -1,0 +1,50 @@
+resources:
+  jobs:
+    elt_pipeline:
+      name: databricks_elt_${bundle.target}
+      max_concurrent_runs: 1
+      environments:
+        - environment_key: serverless
+          spec:
+            environment_version: "6"
+            dependencies:
+              - "PyYAML==6.0.3"
+      tasks:
+        - task_key: raw_ingestion
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/raw/00_ingest_to_raw.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
+        - task_key: bronze_ingestion
+          depends_on:
+            - task_key: raw_ingestion
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/bronze/01_ingest_to_bronze.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
+        - task_key: silver_transformation
+          depends_on:
+            - task_key: bronze_ingestion
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/silver/02_transform_to_silver.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
+        - task_key: gold_transformation
+          depends_on:
+            - task_key: silver_transformation
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/gold/03_transform_to_gold.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
+      schedule:
+        quartz_cron_expression: "0 0 8 ? * MON"
+        timezone_id: America/Lima
+        pause_status: ${var.pipeline_pause_status}

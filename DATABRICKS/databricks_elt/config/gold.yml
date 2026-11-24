@@ -1,0 +1,28 @@
+source_schema: "{silver_schema}"
+target_schema: "{gold_schema}"
+
+source_tables:
+  orders:
+    table: slv_orders
+    primary_keys: [order_id]
+    gold_target: fct_order_items
+  order_items:
+    table: slv_order_items
+    primary_keys: [order_id, order_item_id]
+    gold_target: fct_order_items
+  customers:
+    table: slv_customers
+    primary_keys: [customer_id]
+    gold_target: dim_customer
+  products:
+    table: slv_products
+    primary_keys: [product_id]
+    gold_target: dim_product
+  sellers:
+    table: slv_sellers
+    primary_keys: [seller_id]
+    gold_target: dim_seller
+  category_translation:
+    table: slv_category_translation
+    primary_keys: [product_category_name]
+    gold_target: dim_product

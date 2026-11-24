@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "databricks-elt"
+version = "0.1.0"
+description = "Proyecto ELT por capas en Databricks Free Edition"
+requires-python = ">=3.10"
+dependencies = ["PyYAML==6.0.3"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["process", "process.*", "utils", "utils.*"]

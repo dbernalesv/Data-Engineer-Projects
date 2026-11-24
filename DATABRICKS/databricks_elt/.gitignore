@@ -1,0 +1,19 @@
+# Datos locales y secretos
+data/
+.env
+.env.*
+!.env.example
+
+# Archivos auxiliares de Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Estado local de Databricks
+.databricks/
+.bundle/
+logs/

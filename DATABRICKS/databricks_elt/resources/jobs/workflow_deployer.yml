@@ -1,0 +1,28 @@
+resources:
+  jobs:
+    workflow_deployer:
+      name: Workflow Deployer
+      max_concurrent_runs: 1
+      parameters:
+        - name: manifest_path
+          default: deploy/initial.yml
+      environments:
+        - environment_key: serverless
+          spec:
+            environment_version: "6"
+            dependencies:
+              - "PyYAML==6.0.3"
+      tasks:
+        - task_key: deploy_ddl
+          environment_key: serverless
+          notebook_task:
+            notebook_path: ../../notebooks/deploy/00_deploy_ddl.py
+            source: WORKSPACE
+            base_parameters:
+              project_root: ${workspace.file_path}
+  job_runs:
+    deploy_ddl:
+      job_id: ${resources.jobs.workflow_deployer.id}
+      lifecycle:
+        triggers:
+          - on_bundle_deploy: true
