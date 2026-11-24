@@ -4,7 +4,7 @@ bundle:
 
 variables:
   pipeline_pause_status:
-    default: UNPAUSED
+    default: PAUSED
 
 include:
   - resources/jobs/*.yml
